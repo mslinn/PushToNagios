@@ -535,7 +535,6 @@ public class Nsca {
             nsca.setNscaService("domainBus"); // todo allow this property to be overridden on a per-message basis
             nsca.setConfigFile("nsca_send_clear.properties");
             nsca.sendNsca(NAGIOS_WARN, "Test warning message");
-            System.out.println("Send complete");
         } catch (Exception e) {
             System.out.println(e.getMessage());
         }
