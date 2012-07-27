@@ -107,7 +107,7 @@ public class Nsca {
     private int nscaPort = 5667;
 
     /** host for this code */
-    private final String reportingHost = getHostName();
+    private final String reportingHost = getHost();
 
     /** Nagios service name to associate with the messages forwarded to NSCA server */
     private String nscaService = "UNSPECIFIED_SERVICE";
@@ -318,15 +318,15 @@ public class Nsca {
         }
     }
 
-    protected String getHostName() {
+    protected String getHost() {
         String hostname;
         try {
-            hostname = InetAddress.getLocalHost().getHostName();
+            hostname = InetAddress.getLocalHost().getHostAddress(); // .getHostName();
         } catch (Exception e) {
             return null;
         }
-        if (hostname.indexOf(".") > 0)
-            hostname = hostname.substring(0, hostname.indexOf("."));
+//        if (hostname.indexOf(".") > 0)
+//            hostname = hostname.substring(0, hostname.indexOf("."));
         return hostname;
     }
 
@@ -534,7 +534,10 @@ public class Nsca {
             nsca.setNscaPort(5667);
             nsca.setNscaService("domainBus"); // todo allow this property to be overridden on a per-message basis
             nsca.setConfigFile("nsca_send_clear.properties");
-            nsca.sendNsca(NAGIOS_WARN, "Test warning message");
+//            nsca.sendNsca(NAGIOS_OK, "Everything is peachy-keen");
+//            nsca.sendNsca(NAGIOS_WARN, "Test warning message");
+//            nsca.sendNsca(NAGIOS_CRITICAL, "Test critical message");
+            nsca.sendNsca(NAGIOS_UNKNOWN, "What's going on?");
         } catch (Exception e) {
             System.out.println(e.getMessage());
         }
