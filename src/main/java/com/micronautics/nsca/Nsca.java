@@ -101,7 +101,7 @@ public class Nsca {
     private int reportDelayThresholdSeconds = 10;
 
     /** Nagios host where the nsca server is running */
-    private String nscaHost = null;
+    private String nscaHost = "localhost";
 
     /** Nagios port where the nsca server is running */
     private int nscaPort = 5667;
@@ -216,11 +216,11 @@ public class Nsca {
         try {
             InputStream is = getClass().getClassLoader().getResourceAsStream(configFile);
             props.load(is);
-            _encryptionMethod = Integer.parseInt(props.getProperty("encryption_method", "0"));
+            _encryptionMethod = Integer.parseInt(props.getProperty("encryption_method", "" + ENCRYPT_NONE));
             _password         = props.getProperty("password", "");
             nscaHost          = props.getProperty("nscaHost", "localhost");
             nscaPort          = Integer.parseInt(props.getProperty("nscaPort", "5667"));
-            nscaService       = props.getProperty("nscaService", "UNDEFINED_SERVICE");
+            nscaService       = props.getProperty("nscaService", "UNSPECIFIED_SERVICE");
         } catch (IOException ex) {
             System.err.println(ex.getMessage());
             System.exit(-1);
