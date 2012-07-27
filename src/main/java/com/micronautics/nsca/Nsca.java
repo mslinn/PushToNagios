@@ -534,10 +534,13 @@ public class Nsca {
             nsca.setNscaPort(5667);
             nsca.setNscaService("domainBus"); // todo allow this property to be overridden on a per-message basis
             nsca.setConfigFile("nsca_send_clear.properties");
-//            nsca.sendNsca(NAGIOS_OK, "Everything is peachy-keen");
-//            nsca.sendNsca(NAGIOS_WARN, "Test warning message");
-//            nsca.sendNsca(NAGIOS_CRITICAL, "Test critical message");
             nsca.sendNsca(NAGIOS_UNKNOWN, "What's going on?");
+            Thread.sleep(30000);
+            nsca.sendNsca(NAGIOS_OK, "Everything is peachy-keen");
+            Thread.sleep(30000);
+            nsca.sendNsca(NAGIOS_WARN, "Test warning message");
+            Thread.sleep(30000);
+            nsca.sendNsca(NAGIOS_CRITICAL, "Test critical message");
         } catch (Exception e) {
             System.out.println(e.getMessage());
         }
