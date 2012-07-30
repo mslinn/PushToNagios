@@ -69,6 +69,12 @@ public class Nsca {
     /** Nagios message level for unknown status */
     public static final int NAGIOS_UNKNOWN = 3;
 
+    /** Shared amongst all instances */
+    protected static ThreadPoolExecutor threadPool;
+
+    /** Shared amongst all instances */
+    protected static LinkedBlockingQueue queue;
+
     private Logger logger = LoggerFactory.getLogger(Nsca.class);
 
     /** Configuration file; indicates the encryption model to use and the password, in Java properties format */
@@ -82,8 +88,6 @@ public class Nsca {
 
     private int poolSize = 50;
     private int maxPoolSize = 100;
-    private ThreadPoolExecutor threadPool = null;
-    private final LinkedBlockingQueue queue = new LinkedBlockingQueue(2000);
     private long keepAliveTime = 10;
 
     /** Optional message to be sent to Nagios when the appender is instantiated. */
@@ -109,7 +113,7 @@ public class Nsca {
 
 
     public Nsca() throws Exception {
-        createThreadPool();
+        maybeCreateThreadPool();
     }
 
     public Nsca(String nscaConfigFileName) throws Exception {
@@ -122,7 +126,7 @@ public class Nsca {
 
         configFile = nscaConfigFileName;
         configure();
-        createThreadPool();
+        maybeCreateThreadPool();
     }
 
     /** Set the configuration parameters instead of reading them from the config file; encryption method defaults to none */
@@ -218,8 +222,11 @@ public class Nsca {
         }
     }
 
-    private void createThreadPool() {
-        threadPool = new ThreadPoolExecutor(poolSize, maxPoolSize, keepAliveTime, TimeUnit.SECONDS, queue);
+    private void maybeCreateThreadPool() {
+        if (threadPool==null) {
+            queue = new LinkedBlockingQueue(2000);
+            threadPool = new ThreadPoolExecutor(poolSize, maxPoolSize, keepAliveTime, TimeUnit.SECONDS, queue);
+        }
     }
 
     protected String getHost() {
@@ -254,7 +261,7 @@ public class Nsca {
                 _password = password;
         }
 
-        createThreadPool();
+        maybeCreateThreadPool();
     }
 
     private class NscaSendRunnable implements Runnable {
