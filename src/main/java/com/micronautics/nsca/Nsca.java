@@ -17,7 +17,6 @@ package com.micronautics.nsca;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import scala.annotation.target.param;
 
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -34,20 +33,18 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.zip.CRC32;
 
-// todo make the docs line up with the finished software
 /** Java native equivalent to nsca_send program. It can encrypt and send alerts to the NSCA server. Example usage:
  * <pre>try {
  * 	   Nsca nsca = new Nsca();
  * 	   nsca.setConfigFile("nsca_send_clear.properties");
- * 	   nsca.send("localhost", "5667", "MyApplication", "something bad just happened", 1, 0);
+ * 	   nsca.send(NAGIOS_WARN, "Your pants are on fire!");
  * } catch (Exception e) {
  * 	   System.out.println(e.getMessage());
  * }</pre>
  * @author <a href="mailto:jarlyons@gmail.com">Jar Lyons</a> Original Java version, packaged with log4j/MDC
- * @author <a href="mailto:mslinn@micronauticsresearch.com">Mike Slinn</a> standalone version */
+ * @author <a href="mailto:mslinn@micronauticsresearch.com">Mike Slinn</a> standalone version, packaged with SBT */
 public class Nsca {
-    /* Initialization Vector size */
-    private static final int TRANSMITTED_IV_SIZE = 128;
+    private static final int INITIALIZATION_VECTOR_SIZE = 128;
 
     /* No encryption to Nsca server required */
     public static final int ENCRYPT_NONE = 0;
@@ -81,9 +78,8 @@ public class Nsca {
 
     private int nscaVersion = 3;
 
-    /** Variables associated with the thread pool used for sending to nsca server */
     private int poolSize = 50;
-    private int maxPoolSize = 50;
+    private int maxPoolSize = 100;
     private ThreadPoolExecutor threadPool = null;
     private final LinkedBlockingQueue queue = new LinkedBlockingQueue(2000);
     private long keepAliveTime = 10;
@@ -94,12 +90,8 @@ public class Nsca {
     /** Level of optional message to be sent to Nagios when the appender is instantiated. */
     private int startupMsgLevel = NAGIOS_NO_MSG;
 
-    /**
-     * Variables associated with delivery timeouts ...
-     */
+    /** Message delivery timeout */
     private int timeout = 5000;
-    Thread unsentMessageThread = null;
-    private int reportDelayThresholdSeconds = 10;
 
     /** Nagios host where the nsca server is running */
     private String nscaHost = "localhost";
@@ -107,7 +99,7 @@ public class Nsca {
     /** Nagios port where the nsca server is running */
     private int nscaPort = 5667;
 
-    /** host for this code */
+    /** host name running this code */
     private final String reportingHost = getHost();
 
     /** Nagios service name to associate with the messages forwarded to NSCA server */
@@ -131,16 +123,16 @@ public class Nsca {
         createThreadPool();
     }
 
+    /** Set the configuration parameters instead of reading them from the config file; encryption method defaults to none */
+    public Nsca(String host, int port, String service) throws Exception {
+        init(host, port, service, ENCRYPT_NONE, "");
+    }
+
     /** Set the configuration parameters instead of reading them from the config file.
      * @param encryptionMethod The new encryption method (0=None, 1=XOR)
      * @param password must be specified for encryption methods other than None. */
     public Nsca(String host, int port, String service, int encryptionMethod, String password) throws Exception {
         init(host, port, service, encryptionMethod, password);
-    }
-
-    /** Set the configuration parameters instead of reading them from the config file; encryption method defaults to none */
-    public Nsca(String host, int port, String service) throws Exception {
-        init(host, port, service, ENCRYPT_NONE, "");
     }
 
     /** Push the alert to the nagios server
@@ -171,6 +163,39 @@ public class Nsca {
         startupMsg = msgText;
     }
 
+    /** Encrypts the send buffer according the nsca encryption method
+     * @param buffer Buffer to be encrypted
+     * @param encryptionVector Encryption Initialization Vector
+     * @throws Exception for unsupported encryption scheme */
+    public void encryptBuffer(int encryptionMethod, byte[] buffer, byte[] encryptionVector) throws Exception {
+        switch (encryptionMethod) {
+            case ENCRYPT_NONE:
+                break;
+
+            case ENCRYPT_XOR:
+                /* rotate over encryptionVector received from the server */
+                for (int y = 0, x = 0; y < buffer.length; y++, x++) {
+                    /* keep rotating over encryptionVector */
+                    if (x >= INITIALIZATION_VECTOR_SIZE)
+                        x = 0;
+                    buffer[y] ^= encryptionVector[x];
+                }
+                /* rotate over password */
+                if (_password != null) {
+                    byte[] password = _password.getBytes();
+                    for (int y = 0, x = 0; y < buffer.length; y++, x++) {
+                        if (x >= password.length)
+                            x = 0;
+                        buffer[y] ^= password[x];
+                    }
+                }
+                break;
+
+            default:
+                throw new Exception("NagiosAppender::encryptBuffer(): unsupported encryption method: " + encryptionMethod);
+        }
+    }
+
     /**
      * If no config file specified, the default encryption method and no password is assumed.
      * @return Boolean specifying whether configuration succeeded
@@ -191,51 +216,8 @@ public class Nsca {
         }
     }
 
-    /** Encrypts the send buffer according the nsca encryption method
-     * @param buffer Buffer to be encrypted
-     * @param encryptionVector Encryption Initialization Vector
-     * @throws Exception for unsupported encryption scheme */
-    public void encryptBuffer(int encryptionMethod, byte[] buffer, byte[] encryptionVector) throws Exception {
-        switch (encryptionMethod) {
-            case ENCRYPT_NONE:
-                break;
-
-            case ENCRYPT_XOR:
-                /* rotate over encryptionVector received from the server */
-                for (int y = 0, x = 0; y < buffer.length; y++, x++) {
-                    /* keep rotating over encryptionVector */
-                    if (x >= TRANSMITTED_IV_SIZE)
-                        x = 0;
-                    buffer[y] ^= encryptionVector[x];
-                }
-                /* rotate over password */
-                if (_password != null) {
-                    byte[] password = _password.getBytes();
-                    for (int y = 0, x = 0; y < buffer.length; y++, x++) {
-                        if (x >= password.length)
-                            x = 0;
-                        buffer[y] ^= password[x];
-                    }
-                }
-                break;
-
-            default:
-                throw new Exception("NagiosAppender::encryptBuffer(): unsupported encryption method: " + encryptionMethod);
-        }
-    }
-
     private void createThreadPool() {
         threadPool = new ThreadPoolExecutor(poolSize, maxPoolSize, keepAliveTime, TimeUnit.SECONDS, queue);
-    }
-
-    private class NscaEvent {
-        public int level;
-        public String message;
-
-        public NscaEvent(int level, String message) {
-            this.level = level;
-            this.message = message;
-        }
     }
 
     protected String getHost() {
