@@ -1,17 +1,13 @@
 package com.micronautics.nsca
 
-import org.scalatest.{BeforeAndAfterAll, WordSpec}
+import org.scalatest.WordSpec
 import org.scalatest.matchers.MustMatchers
 import Nsca._
 
 /**
  * @author Mike Slinn
  */
-class NscaTest extends WordSpec with BeforeAndAfterAll with MustMatchers {
-
-  override protected def beforeAll: Unit = { }
-
-  override protected def afterAll(): Unit = { }
+class NscaTest extends WordSpec with MustMatchers {
 
   "Nsca constructor" must {
     "be called explicitly" in {
