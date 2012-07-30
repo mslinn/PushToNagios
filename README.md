@@ -4,3 +4,13 @@ notifications to a properly configured Nagios server. The original project used 
 MDC uses ThreadLocal variables, which are verboten.
 
 See the documentation on [how to set up Nagios and NSCA server](https://docs.google.com/document/d/1DGrlGG87oZdEvDJ1b6Z8JRxOggCDMTp2kUAgj4oJ1Jg/edit#).
+
+This project uses the concept of 'channels' to Nagios.
+A channel is supported by an instance of the `Nsca` class,
+and delivers messages to a specific Nagios service on a unique domain and port.
+Each channel has distinct state, but they all share the same threadpool.
+Each message is sent on a separate thread.
+
+Channels are immutable.
+You can create channels by specifying various properties files to the `Nsca` constructor,
+or you can specify each property individually. See the unit tests for examples of how to create channels.
