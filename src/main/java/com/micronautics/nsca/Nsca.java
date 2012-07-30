@@ -33,7 +33,8 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.zip.CRC32;
 
-/** Java native equivalent to nsca_send program. It can encrypt and send alerts to the NSCA server. Example usage:
+/**
+ * Java native equivalent to nsca_send program. It can encrypt and send alerts to the NSCA server. Example usage:
  * <pre>try {
  * 	   Nsca nsca = new Nsca();
  * 	   nsca.setConfigFile("nsca_send_clear.properties");
@@ -41,6 +42,7 @@ import java.util.zip.CRC32;
  * } catch (Exception e) {
  * 	   System.out.println(e.getMessage());
  * }</pre>
+ * @see https://docs.google.com/document/d/1DGrlGG87oZdEvDJ1b6Z8JRxOggCDMTp2kUAgj4oJ1Jg/edit
  * @author <a href="mailto:jarlyons@gmail.com">Jar Lyons</a> Original Java version, packaged with log4j/MDC
  * @author <a href="mailto:mslinn@micronauticsresearch.com">Mike Slinn</a> standalone version, packaged with SBT */
 public class Nsca {
