@@ -17,6 +17,7 @@ package com.micronautics.nsca;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import scala.annotation.target.param;
 
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -38,21 +39,38 @@ import java.util.zip.CRC32;
  * <pre>try {
  * 	   Nsca nsca = new Nsca();
  * 	   nsca.setConfigFile("nsca_send_clear.properties");
- * 	   nsca.sendNsca("localhost", "5667", "MyApplication", "something bad just happened", 1, 0);
+ * 	   nsca.send("localhost", "5667", "MyApplication", "something bad just happened", 1, 0);
  * } catch (Exception e) {
  * 	   System.out.println(e.getMessage());
  * }</pre>
  * @author <a href="mailto:jarlyons@gmail.com">Jar Lyons</a> Original Java version, packaged with log4j/MDC
  * @author <a href="mailto:mslinn@micronauticsresearch.com">Mike Slinn</a> standalone version */
 public class Nsca {
-    Logger logger = LoggerFactory.getLogger(Nsca.class);
-
     /* Initialization Vector size */
     private static final int TRANSMITTED_IV_SIZE = 128;
 
-    /* default encryption method */
-    protected static final int ENCRYPT_NONE = 0;
-    protected static final int ENCRYPT_XOR = 1;
+    /* No encryption to Nsca server required */
+    public static final int ENCRYPT_NONE = 0;
+
+    /* XOR encryption to Nsca server required */
+    public static final int ENCRYPT_XOR = 1;
+
+    /** For internal use; indicates there is no message to send */
+    protected static final int NAGIOS_NO_MSG = -1;
+
+    /** Nagios message level for green status */
+    public static final int NAGIOS_OK = 0;
+
+    /** Nagios message level for yellow status */
+    public static final int NAGIOS_WARN = 1;
+
+    /** Nagios message level for red status */
+    public static final int NAGIOS_CRITICAL = 2;
+
+    /** Nagios message level for unknown status */
+    public static final int NAGIOS_UNKNOWN = 3;
+
+    private Logger logger = LoggerFactory.getLogger(Nsca.class);
 
     /** Configuration file; indicates the encryption model to use and the password, in Java properties format */
     private String configFile = null;
@@ -61,24 +79,7 @@ public class Nsca {
     /** NSCA password (optional and only used with XOR) */
     private String _password = "";
 
-    /** Nagios return codes */
-    public static final int NAGIOS_NO_MSG = -1;
-    public static final int NAGIOS_OK = 0;
-    public static final int NAGIOS_WARN = 1;
-    public static final int NAGIOS_CRITICAL = 2;
-    public static final int NAGIOS_UNKNOWN = 3;
-
-    /** FIFO buffer of messages to be sent to NSCA */
-    private ArrayList buffer = new ArrayList();
-    private int maxBufferSize = 100;
-
     private int nscaVersion = 3;
-
-    /** Indicates configuration status */
-    private boolean _configured = false;
-
-    /** Indicate that the class is ready to execute append()-commands */
-    private boolean _ready = false;
 
     /** Variables associated with the thread pool used for sending to nsca server */
     private int poolSize = 50;
@@ -91,7 +92,7 @@ public class Nsca {
     private String startupMsg = "";
 
     /** Level of optional message to be sent to Nagios when the appender is instantiated. */
-    private int startupMsgLevel = 0;
+    private int startupMsgLevel = NAGIOS_NO_MSG;
 
     /**
      * Variables associated with delivery timeouts ...
@@ -113,32 +114,11 @@ public class Nsca {
     private String nscaService = "UNSPECIFIED_SERVICE";
 
 
-    public Nsca() {
-        super();
-        threadPool = new ThreadPoolExecutor(poolSize, maxPoolSize, keepAliveTime, TimeUnit.SECONDS, queue);
+    public Nsca() throws Exception {
+        createThreadPool();
     }
 
-    public void start() throws Exception {
-        if (startupMsg.length()>0)
-            sendMessage(startupMsgLevel, startupMsg);
-        startupMsgLevel = NAGIOS_NO_MSG;
-        startupMsg = null;
-    }
-
-    /**
-     * @param msgLevel one of NAGIOS_UNKNOWN, NAGIOS_OK, NAGIOS_WARN, or NAGIOS_CRITICAl */
-    void sendMessage(int msgLevel, String message) throws Exception {
-      sendNsca(msgLevel, message);
-    }
-
-    public void setSendStartupMessage(int msgLevel, String msgText) {
-        startupMsgLevel = msgLevel;
-        startupMsg = msgText;
-    }
-
-    /** Set path of nagios config file
-     * @param nscaConfigFileName The new Url value  */
-    public void setConfigFile(String nscaConfigFileName) throws Exception {
+    public Nsca(String nscaConfigFileName) throws Exception {
         if (nscaConfigFileName == null)
             return;
 
@@ -148,70 +128,54 @@ public class Nsca {
 
         configFile = nscaConfigFileName;
         configure();
+        createThreadPool();
     }
 
-    /** Set the encryption method (instead of reading it from the config file)
-     * @param value The new encryption method (0=None, 1=XOR) */
-    public Nsca setEncryptionMethod(int value) {
-        if (value >= 0)
-            _encryptionMethod = value;
-
-        return this;
+    /** Set the configuration parameters instead of reading them from the config file.
+     * @param encryptionMethod The new encryption method (0=None, 1=XOR)
+     * @param password must be specified for encryption methods other than None. */
+    public Nsca(String host, int port, String service, int encryptionMethod, String password) throws Exception {
+        init(host, port, service, encryptionMethod, password);
     }
 
-    /** Set the NSCA password (instead of reading it from the config file) */
-    public Nsca setPassword(String value) {
-        if (value == null)
-            return this;
-
-        value = value.trim();
-        if (value.length() == 0)
-            return this;
-
-        _password = value;
-        return this;
+    /** Set the configuration parameters instead of reading them from the config file; encryption method defaults to none */
+    public Nsca(String host, int port, String service) throws Exception {
+        init(host, port, service, ENCRYPT_NONE, "");
     }
 
+    /** Push the alert to the nagios server
+     * @param msgLevel one of NAGIOS_UNKNOWN, NAGIOS_OK, NAGIOS_WARN, or NAGIOS_CRITICAl
+     * @param message up to 256 characters long */
+    public void send(int msgLevel, String message) throws Exception {
+        logger.debug("send() about to send '" + message + "'");
+        if (null == message)
+            return;
 
-    public Nsca setNscaHost(String host) {
-        this.nscaHost = host;
-        return this;
+        NscaSendRunnable nscaSendRunnable = new NscaSendRunnable(msgLevel, message);
+        try {
+            threadPool.execute(nscaSendRunnable);
+        } catch (RejectedExecutionException e) {
+            logger.error(e.getMessage());
+        }
     }
 
-    public Nsca setNscaPort(int port) {
-        this.nscaPort = port;
-        return this;
+    public void start() throws Exception {
+        if (startupMsg.length()>0)
+            send(startupMsgLevel, startupMsg);
+        startupMsgLevel = NAGIOS_NO_MSG;
+        startupMsg = null;
     }
 
-    public Nsca setNscaService(String service) {
-        this.nscaService = service;
-        return this;
-    }
-
-    /** @return true, when we are ready to write messages to the nsca server */
-    public boolean ready() throws Exception {
-        if (_ready)
-            return true;
-
-        if (!_configured && !configure())
-            return false;
-
-        _ready = true;
-        return _ready;
+    public void setStartupMessage(int msgLevel, String msgText) {
+        startupMsgLevel = msgLevel;
+        startupMsg = msgText;
     }
 
     /**
      * If no config file specified, the default encryption method and no password is assumed.
      * @return Boolean specifying whether configuration succeeded
      */
-    protected boolean configure() throws Exception {
-        if (_configured)
-            return true;
-
-        // No config file specified - assumes the default encryption method and no password.
-        if (configFile == null)
-            return true;
-
+    protected void configure() throws Exception {
         Properties props = new Properties();
         try {
             InputStream is = getClass().getClassLoader().getResourceAsStream(configFile);
@@ -225,9 +189,6 @@ public class Nsca {
             System.err.println(ex.getMessage());
             System.exit(-1);
         }
-
-        _configured = true;
-        return _configured;
     }
 
     /** Encrypts the send buffer according the nsca encryption method
@@ -263,6 +224,10 @@ public class Nsca {
         }
     }
 
+    private void createThreadPool() {
+        threadPool = new ThreadPoolExecutor(poolSize, maxPoolSize, keepAliveTime, TimeUnit.SECONDS, queue);
+    }
+
     private class NscaEvent {
         public int level;
         public String message;
@@ -270,51 +235,6 @@ public class Nsca {
         public NscaEvent(int level, String message) {
             this.level = level;
             this.message = message;
-        }
-    }
-
-    public synchronized void flushBuffer() {
-        synchronized (buffer) {
-            try {
-                if (buffer.size() < 1)
-                    return;
-
-                int flushedMessages = 0;
-                while (!buffer.isEmpty()) {
-                    if ((maxBufferSize > 0) && (flushedMessages > maxBufferSize))
-                        return;
-
-                    flushedMessages++;
-                    NscaEvent event = (NscaEvent)buffer.remove(0);
-                    try {
-                        sendNsca(event.level, event.message);
-                    } catch (Exception ignored) { }
-                }
-            } catch (Exception e) {
-                String errorMsg = "NagiosAppender::flushBuffer(): " + e.getMessage();
-                System.err.println(errorMsg);
-            }
-        }
-    }
-
-    /** Push the alert to the nagios server */
-    public void sendNsca(int msgLevel, String message) throws Exception {
-        logger.debug("sendNsca() about to send '" + message + "'");
-        if (null == message)
-            return;
-
-        NscaSendRunnable nscaSendRunnable = new NscaSendRunnable(buffer, msgLevel, message);
-        try {
-            threadPool.execute(nscaSendRunnable);
-        } catch (RejectedExecutionException e) {
-            synchronized (buffer) {
-                // put the event back on the stack if we were not successful ...
-                if (buffer.size() < maxBufferSize) {
-                    buffer.add(new NscaEvent(msgLevel, message));
-                } else {
-                    //LogLog.debug(threadName + "sendNsca(): executor thread pool rejected event, and buffer is too large ... abandoning event: " + event.getMessage());
-                }
-            }
         }
     }
 
@@ -330,14 +250,36 @@ public class Nsca {
         return hostname;
     }
 
+    private void init(String host, int port, String service, int encryptionMethod, String password) throws Exception {
+        if (host==null || host.trim().length()==0)
+            throw new Exception("No NSCA host specified");
+
+        if (service==null || service.trim().length()==0)
+            throw new Exception("No NSCA service specified");
+
+        this.nscaHost = host;
+        this.nscaPort = port;
+        this.nscaService = service;
+
+        if (encryptionMethod >= 0)
+            _encryptionMethod = encryptionMethod;
+
+        if (password != null) {
+            password = password.trim();
+            if (password.length() > 0)
+                _password = password;
+        }
+
+        createThreadPool();
+    }
+
     private class NscaSendRunnable implements Runnable {
         private boolean finished = false;
         private String message;
         private int msgLevel;
         private ArrayList buffer;
 
-        public NscaSendRunnable(ArrayList buffer, int msgLevel, String message) {
-            this.buffer = buffer;
+        public NscaSendRunnable(int msgLevel, String message) {
             this.message = message;
             this.msgLevel = msgLevel;
         }
@@ -485,64 +427,10 @@ public class Nsca {
                         logger.debug("Runnable Exception while closing socket: '" + ee.getMessage());
                     }
                 }
-                if (!finished && (null != buffer) && (null != message)) {
-                    synchronized(buffer) {
-                        // Return the event to the queue if the send was unsuccessful
-                        if (buffer.size() < maxBufferSize)
-                            buffer.add(message);
-                    }
-                }
                 synchronized(this) {
                     notifyAll();
                 }
             }
-        }
-    }
-
-    // todo not used - delete?
-    private class UnsentMessageHandler implements Runnable {
-        private ArrayList buffer;
-        private boolean inUse = false;
-
-        /** @param buffer the buffer to set  */
-        protected void setBuffer(ArrayList buffer) { this.buffer = buffer; }
-
-        /** Thread runs for 10 minutes of idleness */
-        public void run() {
-            try {
-                int passivePass = 0;
-                while (passivePass < 10 && null != buffer) {
-                    if (buffer.size() > 0) {
-                        passivePass = 0;
-                        Thread.sleep(10000);
-                        flushBuffer();
-                    } else {
-                        passivePass++;
-                        Thread.sleep(60000);
-                    }
-                }
-            } catch (Exception e) {
-                logger.warn("UnsentMessageHandler: redelivery attempt failed ... " + e.getMessage());
-            }
-        }
-    }
-
-    public static void main(String[] args) {
-        try {
-            Nsca nsca = new Nsca();
-            nsca.setNscaHost("localhost");
-            nsca.setNscaPort(5667);
-            nsca.setNscaService("domainBus"); // todo allow this property to be overridden on a per-message basis
-            nsca.setConfigFile("nsca_send_clear.properties");
-            nsca.sendNsca(NAGIOS_UNKNOWN,  "What's going on?");
-            Thread.sleep(30000);
-            nsca.sendNsca(NAGIOS_CRITICAL, "Test critical message");
-            Thread.sleep(30000);
-            nsca.sendNsca(NAGIOS_WARN,     "Test warning message");
-            Thread.sleep(30000);
-            nsca.sendNsca(NAGIOS_OK,       "Everything is peachy-keen");
-        } catch (Exception e) {
-            System.out.println(e.getMessage());
         }
     }
 }

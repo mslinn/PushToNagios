@@ -11,5 +11,8 @@ scalaVersion in update := "2.9.1-1"
 scalacOptions ++= Seq("-deprecation")
 
 libraryDependencies ++= Seq(
-  "ch.qos.logback" % "logback-classic" % "1.0.0" withSources()
+  "ch.qos.logback" %  "logback-classic" % "1.0.0" withSources(),
+  "org.scalatest"  %  "scalatest_2.9.2" % "1.7.1" % "test" withSources()
 )
+
+com.micronautics.dependencyReport.DependencyReport.dependencyReportSettings
