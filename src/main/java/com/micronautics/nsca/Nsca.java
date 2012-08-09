@@ -76,7 +76,7 @@ public class Nsca {
     /** Shared amongst all instances */
     protected static LinkedBlockingQueue queue;
 
-    private Logger logger = LoggerFactory.getLogger(Nsca.class);
+    private static Logger logger = LoggerFactory.getLogger(Nsca.class);
 
     private int _encryptionMethod = ENCRYPT_NONE;
 
@@ -238,8 +238,8 @@ public class Nsca {
         }
     }
 
-    private String getFileContents(String filename) {
-        InputStream resStream = getClass().getClassLoader().getResourceAsStream(filename);
+    public static String getFileContents(String filename) {
+        InputStream resStream = Nsca.class.getClassLoader().getResourceAsStream(filename);
         if (resStream==null)
             logger.warn("Could not load '%s' from the classpath".format(filename));
         try { // see http://weblogs.java.net/blog/pat/archive/2004/10/stupid_scanner_1.html

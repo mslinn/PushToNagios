@@ -53,17 +53,26 @@ class NscaTest extends WordSpec with MustMatchers {
       val string = "nsca { nscaHost = localhost \n nscaPort = 5667 \n nscaService = %packageName%.%className%.domainBus }"
       val nsca = new Nsca(string, this.getClass)
       expect("com.micronautics.nsca.NscaTest.domainBus", "")(nsca.getNscaService)
-      expect(nsca.getEncryptionMethod, "")(0)
-      expect(nsca.getNscaHost, "")("localhost")
-      expect(nsca.getNscaPort, "")(5667)
+      expect(0, "")(nsca.getEncryptionMethod)
+      expect("localhost", "")(nsca.getNscaHost)
+      expect(5667, "")(nsca.getNscaPort)
+    }
+
+    "point to arbitrary HOCON file" in {
+      val contents = Nsca.getFileContents("application.conf")
+      val nsca = new Nsca(contents, this.getClass)
+      expect("applicationService", "")(nsca.getNscaService)
+      expect(0, "")(nsca.getEncryptionMethod)
+      expect("farFarAway", "")(nsca.getNscaHost)
+      expect(9876, "")(nsca.getNscaPort)
     }
 
     "respond to HOCON string" in {
       val nsca = new Nsca("nsca { nscaHost = localhost \n nscaPort = 5667 \n nscaService = domainBus }");
       expect("domainBus", "")(nsca.getNscaService)
-      expect(nsca.getEncryptionMethod, "")(0)
-      expect(nsca.getNscaHost, "")("localhost")
-      expect(nsca.getNscaPort, "")(5667)
+      expect(0, "")(nsca.getEncryptionMethod)
+      expect("localhost", "")(nsca.getNscaHost)
+      expect(5667, "")(nsca.getNscaPort)
 
       nsca.send(NAGIOS_UNKNOWN, "What's going on?")
       Thread.sleep(10000)
