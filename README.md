@@ -13,7 +13,9 @@ Each message is sent on a separate thread.
 
 Channels are immutable.
 You can create channels by specifying various properties files to the `Nsca` constructor,
-or you can specify each property individually. See the unit tests for examples of how to create channels.
+or you can specify each property individually. See the
+[unit tests](https://github.com/mslinn/PushToNagios/blob/master/src/test/scala/com/micronautics/nsca/NscaTest.scala)
+for examples of how to create channels.
 
 The properties files are hierarchically parsed by the Typesafe Config utility.
 Two special substitutions are made, if an appropriate constructor is called.
