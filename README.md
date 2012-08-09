@@ -15,6 +15,8 @@ Channels are immutable.
 You can create channels by specifying various properties files to the `Nsca` constructor,
 or you can specify each property individually. See the unit tests for examples of how to create channels.
 
+The properties files are hierarchically parsed by the Typesafe Config utility.
+
 Modifications to the original NagiosAppender project were sponsored by [Bookish, LLC](http://bookish.com)
 
 ## Installation

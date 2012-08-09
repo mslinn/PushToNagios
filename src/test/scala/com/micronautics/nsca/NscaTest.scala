@@ -26,25 +26,35 @@ class NscaTest extends WordSpec with MustMatchers {
 
   "Nsca constructor" must {
     "be called explicitly" in {
-      val nsca = new Nsca("localhost", 5667, "domainBus")
-      nsca.send(NAGIOS_UNKNOWN, "What's going on?")
-      Thread.sleep(10000)
-      nsca.send(NAGIOS_CRITICAL, "Test critical message")
-      Thread.sleep(10000)
-      nsca.send(NAGIOS_WARN, "Test warning message")
-      Thread.sleep(10000)
-      nsca.send(NAGIOS_OK, "Everything is peachy-keen")
+      val nsca = new Nsca("blah", 1234, "asdf")
+      expect("asdf", "")(nsca.getNscaService)
+      expect(0, "")(nsca.getEncryptionMethod)
+      expect("blah", "")(nsca.getNscaHost)
+      expect(1234, "")(nsca.getNscaPort)
     }
 
-    "load properties file" in {
-      val nsca = new Nsca("nsca_send_clear.properties");
-      nsca.send(NAGIOS_UNKNOWN, "What's going on?")
-      Thread.sleep(10000)
-      nsca.send(NAGIOS_CRITICAL, "Test critical message")
-      Thread.sleep(10000)
-      nsca.send(NAGIOS_WARN, "Test warning message")
-      Thread.sleep(10000)
-      nsca.send(NAGIOS_OK, "Everything is peachy-keen")
+    "load layered config file(s)" in {
+      val nsca = new Nsca()
+      expect("applicationService", "")(nsca.getNscaService)
+      expect(0, "")(nsca.getEncryptionMethod)
+      expect("farFarAway", "")(nsca.getNscaHost)
+      expect(9876, "")(nsca.getNscaPort)
     }
+  }
+
+  "respond to HOCON string" in {
+    val nsca = new Nsca("nsca { nscaHost = localhost \n nscaPort = 5667 \n nscaService = domainBus }");
+    expect("domainBus", "")(nsca.getNscaService)
+    expect(nsca.getEncryptionMethod, "")(0)
+    expect(nsca.getNscaHost, "")("localhost")
+    expect(nsca.getNscaPort, "")(5667)
+
+    nsca.send(NAGIOS_UNKNOWN, "What's going on?")
+    Thread.sleep(10000)
+    nsca.send(NAGIOS_CRITICAL, "Test critical message")
+    Thread.sleep(10000)
+    nsca.send(NAGIOS_WARN, "Test warning message")
+    Thread.sleep(10000)
+    nsca.send(NAGIOS_OK, "Everything is peachy-keen")
   }
 }

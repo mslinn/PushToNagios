@@ -16,18 +16,18 @@
 
 package com.micronautics.nsca;
 
+import com.typesafe.config.Config;
+import com.typesafe.config.ConfigFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.DataInputStream;
-import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.util.ArrayList;
-import java.util.Properties;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -43,9 +43,9 @@ import java.util.zip.CRC32;
  * } catch (Exception e) {
  * 	   System.out.println(e.getMessage());
  * }</pre>
- * @see https://docs.google.com/document/d/1DGrlGG87oZdEvDJ1b6Z8JRxOggCDMTp2kUAgj4oJ1Jg/edit
+ * @see <a href="http://mikeslinn.blogspot.com/2012/08/pushing-notifications-to-nagios-from.html">Pushing Notifications to Nagios from Java and Scala</a>
  * @author <a href="mailto:jarlyons@gmail.com">Jar Lyons</a> Original Java version, packaged with log4j/MDC
- * @author <a href="mailto:mslinn@micronauticsresearch.com">Mike Slinn</a> standalone version, packaged with SBT */
+ * @author <a href="mailto:mslinn@micronauticsresearch.com">Mike Slinn</a> standalone version, packaged with SBT and converted to use HOCON */
 public class Nsca {
     private static final int INITIALIZATION_VECTOR_SIZE = 128;
 
@@ -78,8 +78,6 @@ public class Nsca {
 
     private Logger logger = LoggerFactory.getLogger(Nsca.class);
 
-    /** Configuration file; indicates the encryption model to use and the password, in Java properties format */
-    private String configFile = null;
     private int _encryptionMethod = ENCRYPT_NONE;
 
     /** NSCA password (optional and only used with XOR) */
@@ -114,23 +112,26 @@ public class Nsca {
 
 
     public Nsca() throws Exception {
+        configure("nsca {}");
         maybeCreateThreadPool();
     }
 
-    public Nsca(String nscaConfigFileName) throws Exception {
-        if (nscaConfigFileName == null)
-            return;
-
-        nscaConfigFileName = nscaConfigFileName.trim();
-        if (nscaConfigFileName.length() == 0)
-            return;
-
-        configFile = nscaConfigFileName;
-        configure();
+    /**
+     * @param strConf might contain config info <code>nsca</code> section in HOCON format; can be null. Example:<pre>
+     * nsca { encryption_method = 0 \n nscaService = blah }
+     * </pre>
+     * If no config information is found, the defaults are: no encryption, Nagios on localhost:5667, will send to "UNSPECIFIED_SERVICE".
+     * @see <a href="http://typesafehub.github.com/config/latest/api/index.html?com/typesafe/config/ConfigParseOptions.html">Config Parse Options</a>
+     * @see <a href="https://github.com/typesafehub/config">Config project on GitHub</a>
+     * @throws Exception
+     */
+    public Nsca(String strConf) throws Exception {
+        configure(strConf);
         maybeCreateThreadPool();
     }
 
-    /** Set the configuration parameters instead of reading them from the config file; encryption method defaults to none */
+    /** Set the configuration parameters instead of reading them from the config file; encryption method defaults to none,
+     * will send to "UNSPECIFIED_SERVICE". */
     public Nsca(String host, int port, String service) throws Exception {
         init(host, port, service, ENCRYPT_NONE, "");
     }
@@ -141,6 +142,16 @@ public class Nsca {
     public Nsca(String host, int port, String service, int encryptionMethod, String password) throws Exception {
         init(host, port, service, encryptionMethod, password);
     }
+
+    public int getEncryptionMethod() { return _encryptionMethod; }
+
+    public String getNscaHost() { return nscaHost; }
+
+    public int getNscaPort() { return nscaPort; }
+
+    public String getNscaService() { return nscaService; }
+
+    public String getReportingHost() { return reportingHost; }
 
     /** Push the alert to the nagios server. If the server is not present a warning is logged but no exception is raised.
      * @param msgLevel one of NAGIOS_UNKNOWN, NAGIOS_OK, NAGIOS_WARN, or NAGIOS_CRITICAl
@@ -203,23 +214,71 @@ public class Nsca {
         }
     }
 
+    private String getFileContents(String filename) {
+        InputStream resStream = getClass().getClassLoader().getResourceAsStream(filename);
+        if (resStream==null)
+            logger.warn("Could not load '%s' from the classpath".format(filename));
+        try { // see http://weblogs.java.net/blog/pat/archive/2004/10/stupid_scanner_1.html
+            return new java.util.Scanner(resStream).useDelimiter("\\A").next();
+        } catch (java.util.NoSuchElementException e) {
+            return "";
+        }
+    }
+
     /**
-     * If no config file specified, the default encryption method and no password is assumed.
+     * @param strConf might contain config info; can be null.
+     * @see #Nsca(String)
      * @return Boolean specifying whether configuration succeeded
      */
-    protected void configure() throws Exception {
-        Properties props = new Properties();
+    protected void configure(String strConf) throws Exception {
+        Config configApplication = ConfigFactory.empty();
         try {
-            InputStream is = getClass().getClassLoader().getResourceAsStream(configFile);
-            props.load(is);
-            _encryptionMethod = Integer.parseInt(props.getProperty("encryption_method", "" + ENCRYPT_NONE));
-            _password         = props.getProperty("password", "");
-            nscaHost          = props.getProperty("nscaHost", "localhost");
-            nscaPort          = Integer.parseInt(props.getProperty("nscaPort", "5667"));
-            nscaService       = props.getProperty("nscaService", "UNSPECIFIED_SERVICE");
-        } catch (IOException ex) {
-            System.err.println(ex.getMessage());
-            System.exit(-1);
+            configApplication = ConfigFactory.parseString(getFileContents("application.conf"));
+        } catch (Exception e) {
+            logger.warn("Warning: " + e.getMessage() + " reading application.conf; values will be taken from nsca.conf if present");
+        }
+
+        Config configNsca = ConfigFactory.empty();
+        try {
+            configNsca = ConfigFactory.parseString(getFileContents("nsca.conf"));
+        } catch (Exception e) {
+            logger.warn("Warning: " + e.getMessage() + " reading nsca.conf; default values will be used");
+        }
+
+        Config configStr = ConfigFactory.empty();
+        if (strConf!=null)
+            configStr = ConfigFactory.parseString(strConf);
+        Config config = ConfigFactory.load(configStr).withFallback(configApplication).withFallback(configNsca).getConfig("nsca");
+
+        try {
+            _encryptionMethod = config.getInt("encryption_method");
+        } catch (Exception e) {
+            logger.warn("encryption_method not found in config files, ENCRYPT_NONE (0) assumed");
+        }
+
+        try {
+            _password  = config.getString("password");
+        } catch (Exception e) {
+            if (_encryptionMethod != ENCRYPT_NONE)
+               logger.warn("password not found in config files, empty string assumed");
+        }
+
+        try {
+            nscaHost = config.getString("nscaHost");
+        } catch (Exception e) {
+            logger.warn("nscaHost not found in config files, " + nscaHost + " assumed");
+        }
+
+        try {
+            nscaPort = config.getInt("nscaPort");
+        } catch (Exception e) {
+            logger.warn("nscaPort not found in config files, " + nscaPort + " assumed");
+        }
+
+        try {
+            nscaService = config.getString("nscaService");
+        } catch (Exception e) {
+            logger.warn("nscaService not found in config files, '" + nscaService + "' assumed");
         }
     }
 
