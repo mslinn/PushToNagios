@@ -23,7 +23,7 @@ Modifications to the original NagiosAppender project were sponsored by [Bookish,
 
  1. Add this to your project's `build.sbt` (remember that file requires double-spacing):
 
-        libraryDependencies += "com.micronautics" % "PushToNagios" % "0.1.0-SNAPSHOT" withSources()
+        libraryDependencies += "com.micronautics" % "PushToNagios" % "0.2.0-SNAPSHOT" withSources()
 
         // The sbt-plugin-releases resolver should not be required for SBT 0.12, but it is required for SBT 0.11.3:
 
