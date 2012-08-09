@@ -142,7 +142,7 @@ public class Nsca {
         init(host, port, service, encryptionMethod, password);
     }
 
-    /** Push the alert to the nagios server
+    /** Push the alert to the nagios server. If the server is not present a warning is logged but no exception is raised.
      * @param msgLevel one of NAGIOS_UNKNOWN, NAGIOS_OK, NAGIOS_WARN, or NAGIOS_CRITICAl
      * @param message up to 256 characters long */
     public void send(int msgLevel, String message) throws Exception {
@@ -298,7 +298,7 @@ public class Nsca {
                         try {
                             s.close();
                         } catch (Exception e) {
-                            logger.debug("Runnable Exception while closing socket: '" + e.getMessage());
+                            logger.warn("Runnable Exception while closing socket: '" + e.getMessage());
                         }
                         s = null;
                     }
@@ -396,27 +396,27 @@ public class Nsca {
                 finished = true;
                 logger.debug("Finished");
             } catch (Exception e) {
-                logger.debug(e.getMessage());
+                logger.warn("Nsca error sending to '" + nscaService + "' service monitor on " + nscaHost + ":" + nscaPort + " - " + e.getMessage());
             } finally {
                 if (null != out) {
                     try {
                         out.close();
                     } catch (Exception ee) {
-                        logger.debug("Runnable Exception while closing OutputStream: '" + ee.getMessage());
+                        logger.warn("Runnable Exception while closing OutputStream: '" + ee.getMessage());
                     }
                 }
                 if (null != out) {
                     try {
                         in.close();
                     } catch (Exception ee) {
-                        logger.debug("Runnable Exception while closing InputStream: '" + ee.getMessage());
+                        logger.warn("Runnable Exception while closing InputStream: '" + ee.getMessage());
                     }
                 }
                 if (null != s) {
                     try {
                         s.close();
                     } catch (Exception ee) {
-                        logger.debug("Runnable Exception while closing socket: '" + ee.getMessage());
+                        logger.warn("Runnable Exception while closing socket: '" + ee.getMessage());
                     }
                 }
                 synchronized(this) {
