@@ -40,21 +40,38 @@ class NscaTest extends WordSpec with MustMatchers {
       expect("farFarAway", "")(nsca.getNscaHost)
       expect(9876, "")(nsca.getNscaPort)
     }
-  }
 
-  "respond to HOCON string" in {
-    val nsca = new Nsca("nsca { nscaHost = localhost \n nscaPort = 5667 \n nscaService = domainBus }");
-    expect("domainBus", "")(nsca.getNscaService)
-    expect(nsca.getEncryptionMethod, "")(0)
-    expect(nsca.getNscaHost, "")("localhost")
-    expect(nsca.getNscaPort, "")(5667)
+    "substitute strings in layered config file(s)" in {
+      val nsca = new Nsca(this.getClass)
+      expect("applicationService", "")(nsca.getNscaService)
+      expect(0, "")(nsca.getEncryptionMethod)
+      expect("farFarAway", "")(nsca.getNscaHost)
+      expect(9876, "")(nsca.getNscaPort)
+    }
 
-    nsca.send(NAGIOS_UNKNOWN, "What's going on?")
-    Thread.sleep(10000)
-    nsca.send(NAGIOS_CRITICAL, "Test critical message")
-    Thread.sleep(10000)
-    nsca.send(NAGIOS_WARN, "Test warning message")
-    Thread.sleep(10000)
-    nsca.send(NAGIOS_OK, "Everything is peachy-keen")
+    "substitute strings in HOCON string" in {
+      val string = "nsca { nscaHost = localhost \n nscaPort = 5667 \n nscaService = %packageName%.%className%.domainBus }"
+      val nsca = new Nsca(string, this.getClass)
+      expect("com.micronautics.nsca.NscaTest.domainBus", "")(nsca.getNscaService)
+      expect(nsca.getEncryptionMethod, "")(0)
+      expect(nsca.getNscaHost, "")("localhost")
+      expect(nsca.getNscaPort, "")(5667)
+    }
+
+    "respond to HOCON string" in {
+      val nsca = new Nsca("nsca { nscaHost = localhost \n nscaPort = 5667 \n nscaService = domainBus }");
+      expect("domainBus", "")(nsca.getNscaService)
+      expect(nsca.getEncryptionMethod, "")(0)
+      expect(nsca.getNscaHost, "")("localhost")
+      expect(nsca.getNscaPort, "")(5667)
+
+      nsca.send(NAGIOS_UNKNOWN, "What's going on?")
+      Thread.sleep(10000)
+      nsca.send(NAGIOS_CRITICAL, "Test critical message")
+      Thread.sleep(10000)
+      nsca.send(NAGIOS_WARN, "Test warning message")
+      Thread.sleep(10000)
+      nsca.send(NAGIOS_OK, "Everything is peachy-keen")
+    }
   }
 }

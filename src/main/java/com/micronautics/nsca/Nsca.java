@@ -112,7 +112,7 @@ public class Nsca {
 
 
     public Nsca() throws Exception {
-        configure("nsca {}");
+        configure("nsca {}", null);
         maybeCreateThreadPool();
     }
 
@@ -126,7 +126,31 @@ public class Nsca {
      * @throws Exception
      */
     public Nsca(String strConf) throws Exception {
-        configure(strConf);
+        configure(strConf, null);
+        maybeCreateThreadPool();
+    }
+
+    /**
+     * @param caller used to define substitutions of HOCON values read from config files
+     * @throws Exception
+     */
+    public Nsca(Class caller) throws Exception {
+        configure("nsca {}", caller);
+        maybeCreateThreadPool();
+    }
+
+    /**
+     * @param strConf might contain config info <code>nsca</code> section in HOCON format; can be null. Example:<pre>
+     * nsca { encryption_method = 0 \n nscaService = blah }
+     * </pre>
+     * If no config information is found, the defaults are: no encryption, Nagios on localhost:5667, will send to "UNSPECIFIED_SERVICE".
+     * @param caller used to define substitutions of HOCON values.
+     * @see <a href="http://typesafehub.github.com/config/latest/api/index.html?com/typesafe/config/ConfigParseOptions.html">Config Parse Options</a>
+     * @see <a href="https://github.com/typesafehub/config">Config project on GitHub</a>
+     * @throws Exception
+     */
+    public Nsca(String strConf, Class caller) throws Exception {
+        configure(strConf, caller);
         maybeCreateThreadPool();
     }
 
@@ -225,29 +249,43 @@ public class Nsca {
         }
     }
 
+    private String substitute(String input, String packageName, String className) {
+        return input.replaceAll("%className%", className).replaceAll("%packageName%", packageName);
+    }
+
     /**
      * @param strConf might contain config info; can be null.
      * @see #Nsca(String)
      * @return Boolean specifying whether configuration succeeded
      */
-    protected void configure(String strConf) throws Exception {
+    protected void configure(String strConf, Class caller) throws Exception {
+        String className = "";
+        String packageName = "";
+        if (caller!=null) {
+            String fqName = caller.getName();
+            className = fqName.substring(fqName.lastIndexOf(".")+1);
+            packageName = fqName.substring(0, fqName.lastIndexOf("."));
+        }
+
         Config configApplication = ConfigFactory.empty();
         try {
-            configApplication = ConfigFactory.parseString(getFileContents("application.conf"));
+            String contents = substitute(getFileContents("application.conf"), packageName, className);
+            configApplication = ConfigFactory.parseString(contents);
         } catch (Exception e) {
             logger.warn("Warning: " + e.getMessage() + " reading application.conf; values will be taken from nsca.conf if present");
         }
 
         Config configNsca = ConfigFactory.empty();
         try {
-            configNsca = ConfigFactory.parseString(getFileContents("nsca.conf"));
+            String contents = substitute(getFileContents("nsca.conf"), packageName, className);
+            configNsca = ConfigFactory.parseString(contents);
         } catch (Exception e) {
             logger.warn("Warning: " + e.getMessage() + " reading nsca.conf; default values will be used");
         }
 
         Config configStr = ConfigFactory.empty();
         if (strConf!=null)
-            configStr = ConfigFactory.parseString(strConf);
+            configStr = ConfigFactory.parseString(substitute(strConf, packageName, className));
         Config config = ConfigFactory.load(configStr).withFallback(configApplication).withFallback(configNsca).getConfig("nsca");
 
         try {

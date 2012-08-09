@@ -16,6 +16,10 @@ You can create channels by specifying various properties files to the `Nsca` con
 or you can specify each property individually. See the unit tests for examples of how to create channels.
 
 The properties files are hierarchically parsed by the Typesafe Config utility.
+Two special substitutions are made, if an appropriate constructor is called.
+The constructors that accept a class as the last parameter translate strings in the configuration files that contain
+`%packageName%` to the package name of the class, and `%className%` to the unqualified class name. The same is true
+for the constructor that accepts a configuration string and a class.
 
 Modifications to the original NagiosAppender project were sponsored by [Bookish, LLC](http://bookish.com)
 
