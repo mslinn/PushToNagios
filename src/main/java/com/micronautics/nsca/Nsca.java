@@ -49,26 +49,37 @@ import java.util.zip.CRC32;
 public class Nsca {
     private static final int INITIALIZATION_VECTOR_SIZE = 128;
 
-    /* No encryption to Nsca server required */
-    public static final int ENCRYPT_NONE = 0;
+    public enum Encryption {
+        NONE(0), XOR(1);
 
-    /* XOR encryption to Nsca server required */
-    public static final int ENCRYPT_XOR = 1;
+        private int value;
 
-    /** For internal use; indicates there is no message to send */
-    protected static final int NAGIOS_NO_MSG = -1;
+        private Encryption(int v) { value = v; }
 
-    /** Nagios message level for green status */
-    public static final int NAGIOS_OK = 0;
+        public static Encryption parse(int v) {
+            for (Encryption value : values())
+                if (value.value==v)
+                    return value;
+            logger.warn("Invalid encryption value: '" + v + "'; using NONE (0)");
+            return NONE;
+        }
+    }
 
-    /** Nagios message level for yellow status */
-    public static final int NAGIOS_WARN = 1;
+    public enum NagiosMsgLevel {
+        NO_MSG(-1), OK(0), WARN(1), CRITICAL(2), UNKNOWN(3);
 
-    /** Nagios message level for red status */
-    public static final int NAGIOS_CRITICAL = 2;
+        private int value;
 
-    /** Nagios message level for unknown status */
-    public static final int NAGIOS_UNKNOWN = 3;
+        private NagiosMsgLevel(int v) { value = v; }
+
+        public static NagiosMsgLevel parse(int v) {
+            for (NagiosMsgLevel value : values())
+                if (value.value==v)
+                    return value;
+            logger.warn("Invalid Nagios message level: '" + v + "'; using OK (0)");
+            return OK;
+        }
+    }
 
     /** Shared amongst all instances */
     protected static ThreadPoolExecutor threadPool;
@@ -78,7 +89,7 @@ public class Nsca {
 
     private static Logger logger = LoggerFactory.getLogger(Nsca.class);
 
-    private int _encryptionMethod = ENCRYPT_NONE;
+    private Encryption _encryptionMethod = Encryption.NONE;
 
     /** NSCA password (optional and only used with XOR) */
     private String _password = "";
@@ -93,7 +104,7 @@ public class Nsca {
     private String startupMsg = "";
 
     /** Level of optional message to be sent to Nagios when the appender is instantiated. */
-    private int startupMsgLevel = NAGIOS_NO_MSG;
+    private NagiosMsgLevel startupMsgLevel = NagiosMsgLevel.NO_MSG;
 
     /** Message delivery timeout */
     private int timeout = 5000;
@@ -157,17 +168,17 @@ public class Nsca {
     /** Set the configuration parameters instead of reading them from the config file; encryption method defaults to none,
      * will send to "UNSPECIFIED_SERVICE". */
     public Nsca(String host, int port, String service) throws Exception {
-        init(host, port, service, ENCRYPT_NONE, "");
+        init(host, port, service, Encryption.NONE, "");
     }
 
     /** Set the configuration parameters instead of reading them from the config file.
      * @param encryptionMethod The new encryption method (0=None, 1=XOR)
      * @param password must be specified for encryption methods other than None. */
-    public Nsca(String host, int port, String service, int encryptionMethod, String password) throws Exception {
+    public Nsca(String host, int port, String service, Encryption encryptionMethod, String password) throws Exception {
         init(host, port, service, encryptionMethod, password);
     }
 
-    public int getEncryptionMethod() { return _encryptionMethod; }
+    public Encryption getEncryptionMethod() { return _encryptionMethod; }
 
     public String getNscaHost() { return nscaHost; }
 
@@ -180,7 +191,7 @@ public class Nsca {
     /** Push the alert to the nagios server. If the server is not present a warning is logged but no exception is raised.
      * @param msgLevel one of NAGIOS_UNKNOWN, NAGIOS_OK, NAGIOS_WARN, or NAGIOS_CRITICAl
      * @param message up to 256 characters long */
-    public void send(int msgLevel, String message) throws Exception {
+    public void send(NagiosMsgLevel msgLevel, String message) throws Exception {
         logger.debug("send() about to send '" + message + "'");
         if (null == message)
             return;
@@ -196,11 +207,11 @@ public class Nsca {
     public void start() throws Exception {
         if (startupMsg.length()>0)
             send(startupMsgLevel, startupMsg);
-        startupMsgLevel = NAGIOS_NO_MSG;
+        startupMsgLevel = NagiosMsgLevel.NO_MSG;
         startupMsg = null;
     }
 
-    public void setStartupMessage(int msgLevel, String msgText) {
+    public void setStartupMessage(NagiosMsgLevel msgLevel, String msgText) {
         startupMsgLevel = msgLevel;
         startupMsg = msgText;
     }
@@ -209,12 +220,12 @@ public class Nsca {
      * @param buffer Buffer to be encrypted
      * @param encryptionVector Encryption Initialization Vector
      * @throws Exception for unsupported encryption scheme */
-    public void encryptBuffer(int encryptionMethod, byte[] buffer, byte[] encryptionVector) throws Exception {
+    public void encryptBuffer(Encryption encryptionMethod, byte[] buffer, byte[] encryptionVector) throws Exception {
         switch (encryptionMethod) {
-            case ENCRYPT_NONE:
+            case NONE:
                 break;
 
-            case ENCRYPT_XOR:
+            case XOR:
                 /* rotate over encryptionVector received from the server */
                 for (int y = 0, x = 0; y < buffer.length; y++, x++) {
                     /* keep rotating over encryptionVector */
@@ -249,7 +260,7 @@ public class Nsca {
         }
     }
 
-    private String substitute(String input, String packageName, String className) {
+    protected static String substitute(String input, String packageName, String className) {
         return input.replaceAll("%className%", className).replaceAll("%packageName%", packageName);
     }
 
@@ -289,15 +300,15 @@ public class Nsca {
         Config config = ConfigFactory.load(configStr).withFallback(configApplication).withFallback(configNsca).getConfig("nsca");
 
         try {
-            _encryptionMethod = config.getInt("encryption_method");
+            _encryptionMethod = Encryption.parse(config.getInt("encryption_method"));
         } catch (Exception e) {
-            logger.warn("encryption_method not found in config files, ENCRYPT_NONE (0) assumed");
+            logger.warn("encryption_method not found in config files, NONE (0) assumed");
         }
 
         try {
             _password  = config.getString("password");
         } catch (Exception e) {
-            if (_encryptionMethod != ENCRYPT_NONE)
+            if (_encryptionMethod != Encryption.NONE)
                logger.warn("password not found in config files, empty string assumed");
         }
 
@@ -339,7 +350,7 @@ public class Nsca {
         return hostname;
     }
 
-    private void init(String host, int port, String service, int encryptionMethod, String password) throws Exception {
+    private void init(String host, int port, String service, Encryption encryptionMethod, String password) throws Exception {
         if (host==null || host.trim().length()==0)
             throw new Exception("No NSCA host specified");
 
@@ -350,7 +361,7 @@ public class Nsca {
         this.nscaPort = port;
         this.nscaService = service;
 
-        if (encryptionMethod >= 0)
+        if (encryptionMethod!=Encryption.NONE)
             _encryptionMethod = encryptionMethod;
 
         if (password != null) {
@@ -365,10 +376,10 @@ public class Nsca {
     private class NscaSendRunnable implements Runnable {
         private boolean finished = false;
         private String message;
-        private int msgLevel;
+        private NagiosMsgLevel msgLevel;
         private ArrayList buffer;
 
-        public NscaSendRunnable(int msgLevel, String message) {
+        public NscaSendRunnable(NagiosMsgLevel msgLevel, String message) {
             this.message = message;
             this.msgLevel = msgLevel;
         }
@@ -453,8 +464,8 @@ public class Nsca {
                 alert[11] = (byte) (serverTime & 0xff);
 
                 // 4th int (this is the code associated with the alert)
-                alert[12] = (byte) ((msgLevel >> 8) & 0xff);
-                alert[13] = (byte) (msgLevel & 0xff);
+                alert[12] = (byte) ((msgLevel.value >> 8) & 0xff);
+                alert[13] = (byte) (msgLevel.value & 0xff);
                 int offset = 14;
 
                 // 1st of 3 strings

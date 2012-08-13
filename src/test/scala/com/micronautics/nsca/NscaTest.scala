@@ -28,7 +28,7 @@ class NscaTest extends WordSpec with MustMatchers {
     "be called explicitly" in {
       val nsca = new Nsca("blah", 1234, "asdf")
       expect("asdf", "")(nsca.getNscaService)
-      expect(0, "")(nsca.getEncryptionMethod)
+      expect(Encryption.NONE, "")(nsca.getEncryptionMethod)
       expect("blah", "")(nsca.getNscaHost)
       expect(1234, "")(nsca.getNscaPort)
     }
@@ -36,7 +36,7 @@ class NscaTest extends WordSpec with MustMatchers {
     "load layered config file(s)" in {
       val nsca = new Nsca()
       expect("applicationService", "")(nsca.getNscaService)
-      expect(0, "")(nsca.getEncryptionMethod)
+      expect(Encryption.NONE, "")(nsca.getEncryptionMethod)
       expect("farFarAway", "")(nsca.getNscaHost)
       expect(9876, "")(nsca.getNscaPort)
     }
@@ -44,7 +44,7 @@ class NscaTest extends WordSpec with MustMatchers {
     "substitute strings in layered config file(s)" in {
       val nsca = new Nsca(this.getClass)
       expect("applicationService", "")(nsca.getNscaService)
-      expect(0, "")(nsca.getEncryptionMethod)
+      expect(Encryption.NONE, "")(nsca.getEncryptionMethod)
       expect("farFarAway", "")(nsca.getNscaHost)
       expect(9876, "")(nsca.getNscaPort)
     }
@@ -53,7 +53,7 @@ class NscaTest extends WordSpec with MustMatchers {
       val string = "nsca { nscaHost = localhost \n nscaPort = 5667 \n nscaService = %packageName%.%className%.domainBus }"
       val nsca = new Nsca(string, this.getClass)
       expect("com.micronautics.nsca.NscaTest.domainBus", "")(nsca.getNscaService)
-      expect(0, "")(nsca.getEncryptionMethod)
+      expect(Encryption.NONE, "")(nsca.getEncryptionMethod)
       expect("localhost", "")(nsca.getNscaHost)
       expect(5667, "")(nsca.getNscaPort)
     }
@@ -62,7 +62,7 @@ class NscaTest extends WordSpec with MustMatchers {
       val contents = Nsca.getFileContents("application.conf")
       val nsca = new Nsca(contents, this.getClass)
       expect("applicationService", "")(nsca.getNscaService)
-      expect(0, "")(nsca.getEncryptionMethod)
+      expect(Encryption.NONE, "")(nsca.getEncryptionMethod)
       expect("farFarAway", "")(nsca.getNscaHost)
       expect(9876, "")(nsca.getNscaPort)
     }
@@ -70,17 +70,17 @@ class NscaTest extends WordSpec with MustMatchers {
     "respond to HOCON string" in {
       val nsca = new Nsca("nsca { nscaHost = localhost \n nscaPort = 5667 \n nscaService = domainBus }");
       expect("domainBus", "")(nsca.getNscaService)
-      expect(0, "")(nsca.getEncryptionMethod)
+      expect(Encryption.NONE, "")(nsca.getEncryptionMethod)
       expect("localhost", "")(nsca.getNscaHost)
       expect(5667, "")(nsca.getNscaPort)
 
-      nsca.send(NAGIOS_UNKNOWN, "What's going on?")
+      nsca.send(NagiosMsgLevel.UNKNOWN, "What's going on?")
       Thread.sleep(10000)
-      nsca.send(NAGIOS_CRITICAL, "Test critical message")
+      nsca.send(NagiosMsgLevel.CRITICAL, "Test critical message")
       Thread.sleep(10000)
-      nsca.send(NAGIOS_WARN, "Test warning message")
+      nsca.send(NagiosMsgLevel.WARN, "Test warning message")
       Thread.sleep(10000)
-      nsca.send(NAGIOS_OK, "Everything is peachy-keen")
+      nsca.send(NagiosMsgLevel.OK, "Everything is peachy-keen")
     }
   }
 }
